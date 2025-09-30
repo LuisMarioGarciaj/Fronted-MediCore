@@ -1,15 +1,55 @@
 import { useEffect, useState } from "react";
-import { getCitas } from "../api/citaApi";
+import { getCitas, createCita, updateCita, deleteCita } from "../api/citaApi";
+import { getPacientes } from "../api/pacienteApi";
+import { getDoctores } from "../api/doctorApi";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { motion } from "framer-motion";
 
 export default function Citas() {
-  const [citas, setCitas] = useState([]);
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState({ paciente: "", doctor: "", fecha: "", motivo: "" });
+  const [editId, setEditId] = useState(null);
 
-  useEffect(() => {
-    getCitas().then((res) => setCitas(res.data));
-  }, []);
+  const [pacientes, setPacientes] = useState([]);
+  const [doctores, setDoctores] = useState([]);
+
+  const load = async () => {
+    const res = await getCitas();
+    setItems(res.data);
+    setPacientes((await getPacientes()).data);
+    setDoctores((await getDoctores()).data);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (editId) {
+      await updateCita(editId, form);
+      setEditId(null);
+    } else {
+      await createCita(form);
+    }
+    setForm({ paciente: "", doctor: "", fecha: "", motivo: "" });
+    await load();
+  };
+
+  const del = async (id) => {
+    if (!confirm("Eliminar cita?")) return;
+    await deleteCita(id);
+    await load();
+  };
+
+  const edit = (c) => {
+    setForm({
+      paciente: c.paciente?._id,
+      doctor: c.doctor?._id,
+      fecha: c.fecha?.substring(0, 16),
+      motivo: c.motivo || "",
+    });
+    setEditId(c._id);
+  };
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-gray-950 via-black to-gray-900 text-white">
@@ -17,43 +57,50 @@ export default function Citas() {
       <div className="flex-1 flex flex-col">
         <Navbar />
         <main className="p-6 flex-1 relative overflow-hidden">
-          {/* Luces decorativas */}
-          <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#65BDB1] rounded-full blur-3xl opacity-30 animate-pulse"></div>
-          <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-pink-600 rounded-full blur-3xl opacity-30 animate-pulse"></div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-4xl font-bold mb-6 relative z-10 text-[#65BDB1] drop-shadow-[0_0_10px_#65BDB1]"
-          >
+          <motion.h1 className="text-4xl font-bold mb-6 text-[#65BDB1] drop-shadow-[0_0_10px_#65BDB1]">
             Citas
           </motion.h1>
 
-          <div className="relative z-10 grid gap-4">
-            {citas.length === 0 ? (
-              <p className="text-gray-400">No hay citas registradas.</p>
-            ) : (
-              citas.map((c, i) => (
-                <motion.div
-                  key={c._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="p-4 rounded-xl bg-black/40 border border-[#65BDB1]/30 shadow-[0_0_15px_#65BDB155] backdrop-blur-xl"
-                >
-                  <div className="font-semibold text-[#65BDB1]">
-                    {new Date(c.fecha).toLocaleDateString()}
-                  </div>
-                  <div className="text-sm text-gray-300">
-                    Paciente: <span className="text-white">{c.paciente?.nombre}</span>
-                  </div>
-                  <div className="text-sm text-gray-300">
-                    Doctor: <span className="text-white">{c.doctor?.nombre}</span>
-                  </div>
-                </motion.div>
-              ))
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Formulario */}
+            <motion.form onSubmit={submit} className="col-span-1 p-6 rounded-2xl bg-black/40 border border-[#65BDB1]/30 shadow-[0_0_20px_#65BDB155] backdrop-blur-xl space-y-3">
+              <select required value={form.paciente} onChange={e => setForm({ ...form, paciente: e.target.value })} className="w-full p-2 rounded bg-white/5 border border-white/10">
+                <option value="">Seleccionar Paciente</option>
+                {pacientes.map(p => <option key={p._id} value={p._id}>{p.nombre}</option>)}
+              </select>
+              <select required value={form.doctor} onChange={e => setForm({ ...form, doctor: e.target.value })} className="w-full p-2 rounded bg-white/5 border border-white/10">
+                <option value="">Seleccionar Doctor</option>
+                {doctores.map(d => <option key={d._id} value={d._id}>{d.nombre}</option>)}
+              </select>
+              <input type="datetime-local" required value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className="w-full p-2 rounded bg-white/5 border border-white/10"/>
+              <input placeholder="Motivo" value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })} className="w-full p-2 rounded bg-white/5 border border-white/10"/>
+              <button className="w-full py-2 rounded bg-gradient-to-r from-[#65BDB1] to-pink-500 shadow-[0_0_15px_#65BDB1]">
+                {editId ? "Actualizar" : "Crear"}
+              </button>
+            </motion.form>
+
+            {/* Listado */}
+            <motion.div className="col-span-2 p-6 rounded-2xl bg-black/40 border border-[#65BDB1]/30 shadow-[0_0_20px_#65BDB155] backdrop-blur-xl">
+              <h2 className="font-semibold mb-4 text-[#65BDB1]">Listado de Citas</h2>
+              <div className="space-y-3 max-h-[60vh] overflow-auto pr-2">
+                {items.map(c => (
+                  <motion.div key={c._id} className="p-4 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center hover:bg-white/10 transition">
+                    <div>
+                      <div className="font-medium text-[#65BDB1]">
+                        {new Date(c.fecha).toLocaleString()}
+                      </div>
+                      <div className="text-sm text-gray-300">
+                        {c.paciente?.nombre} con {c.doctor?.nombre} – {c.motivo}
+                      </div>
+                    </div>
+                    <div className="space-x-2">
+                      <button onClick={() => edit(c)} className="px-3 py-1 rounded bg-blue-600/80 hover:bg-blue-700">Editar</button>
+                      <button onClick={() => del(c._id)} className="px-3 py-1 rounded bg-rose-600/80 hover:bg-rose-700">Eliminar</button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
           </div>
         </main>
       </div>
